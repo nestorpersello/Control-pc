@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ControlPC — Monitor de Estaciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600;700&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1117;
+    --surface2: #111820;
+    --border: #1e2d3d;
+    --accent: #00d4ff;
+    --accent2: #00ff88;
+    --warn: #ffb800;
+    --danger: #ff3d5a;
+    --text: #c8d8e8;
+    --text-dim: #4a6070;
+    --online: #00ff88;
+    --offline: #ff3d5a;
+    --idle: #ffb800;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font: 'Barlow', sans-serif;
+    --font-head: 'Barlow Condensed', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanlines overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,212,255,0.015) 2px,
+      rgba(0,212,255,0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(90deg, rgba(0,212,255,0.04) 0%, transparent 60%);
+    position: sticky; top: 0; z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 34px; height: 34px;
+    border: 2px solid var(--accent);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    box-shadow: 0 0 12px rgba(0,212,255,0.4);
+    animation: pulse-border 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse-border {
+    0%,100% { box-shadow: 0 0 12px rgba(0,212,255,0.4); }
+    50% { box-shadow: 0 0 22px rgba(0,212,255,0.8); }
+  }
+
+  .logo-text {
+    font-family: var(--font-head);
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: #fff;
+  }
+  .logo-text span { color: var(--accent); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent2);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .live-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent2);
+    box-shadow: 0 0 6px var(--accent2);
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+
+  .clock {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 2px;
+  }
+
+  /* ── STATS BAR ── */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat-card {
+    background: var(--surface);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: background 0.2s;
+  }
+  .stat-card:hover { background: var(--surface2); }
+
+  .stat-icon {
+    font-size: 24px;
+    width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+
+  .stat-icon.total { background: rgba(0,212,255,0.1); }
+  .stat-icon.online { background: rgba(0,255,136,0.1); }
+  .stat-icon.offline { background: rgba(255,61,90,0.1); }
+  .stat-icon.idle { background: rgba(255,184,0,0.1); }
+
+  .stat-info { flex: 1; }
+  .stat-num {
+    font-family: var(--font-head);
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .stat-num.c-total { color: var(--accent); }
+  .stat-num.c-online { color: var(--online); }
+  .stat-num.c-offline { color: var(--offline); }
+  .stat-num.c-idle { color: var(--idle); }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+
+  /* ── TOOLBAR ── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 28px;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .search-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 14px 7px 36px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    width: 220px;
+    outline: none;
+    transition: border-color 0.2s;
+    position: relative;
+  }
+  .search-box:focus { border-color: var(--accent); }
+
+  .search-wrap {
+    position: relative;
+  }
+  .search-icon {
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  .btn-filter {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 14px;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--font);
+    letter-spacing: 0.5px;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .btn-filter:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-filter.active-all { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.08); }
+  .btn-filter.active-online { border-color: var(--online); color: var(--online); background: rgba(0,255,136,0.08); }
+  .btn-filter.active-offline { border-color: var(--offline); color: var(--offline); background: rgba(255,61,90,0.08); }
+  .btn-filter.active-idle { border-color: var(--idle); color: var(--idle); background: rgba(255,184,0,0.08); }
+
+  .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .view-toggle {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .view-btn {
+    background: var(--surface2);
+    border: none;
+    padding: 7px 12px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    border-right: 1px solid var(--border);
+  }
+  .view-btn:last-child { border-right: none; }
+  .view-btn.active, .view-btn:hover { background: rgba(0,212,255,0.1); color: var(--accent); }
+
+  .btn-add {
+    background: rgba(0,212,255,0.12);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 7px 16px;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font);
+    letter-spacing: 0.5px;
+    transition: all 0.2s;
+  }
+  .btn-add:hover { background: rgba(0,212,255,0.22); box-shadow: 0 0 12px rgba(0,212,255,0.25); }
+
+  .btn-export {
+    background: rgba(0,255,136,0.08);
+    border: 1px solid rgba(0,255,136,0.4);
+    border-radius: 6px;
+    padding: 7px 16px;
+    color: var(--accent2);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font);
+    letter-spacing: 0.5px;
+    transition: all 0.2s;
+  }
+  .btn-export:hover { background: rgba(0,255,136,0.15); }
+
+  .btn-telegram {
+    background: rgba(41,182,246,0.1);
+    border: 1px solid rgba(41,182,246,0.5);
+    border-radius: 6px;
+    padding: 7px 16px;
+    color: #29b6f6;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font);
+    letter-spacing: 0.5px;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .btn-telegram:hover { background: rgba(41,182,246,0.2); }
+  .btn-telegram.configured::after {
+    content: '';
+    position: absolute;
+    top: 4px; right: 4px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--online);
+    box-shadow: 0 0 5px var(--online);
+  }
+
+  .tg-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+  .tg-status.active { background: rgba(0,255,136,0.08); border: 1px solid rgba(0,255,136,0.3); color: var(--online); }
+  .tg-status.inactive { background: rgba(255,61,90,0.08); border: 1px solid rgba(255,61,90,0.3); color: var(--offline); }
+
+  .tg-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .tg-option {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .tg-option:hover { border-color: #29b6f6; }
+  .tg-option input[type=checkbox] { accent-color: #29b6f6; width: 16px; height: 16px; }
+  .tg-option-label { font-size: 12px; line-height: 1.3; }
+  .tg-option-label strong { display: block; color: #fff; font-size: 13px; }
+
+  /* ── MAIN GRID ── */
+  .main {
+    padding: 24px 28px;
+  }
+
+  /* GRID VIEW */
+  .grid-view {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+
+  .pc-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .pc-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    transition: opacity 0.3s;
+  }
+
+  .pc-card.status-online::before { background: var(--online); box-shadow: 0 0 8px var(--online); }
+  .pc-card.status-offline::before { background: var(--offline); box-shadow: 0 0 8px var(--offline); }
+  .pc-card.status-idle::before { background: var(--idle); box-shadow: 0 0 8px var(--idle); }
+
+  .pc-card:hover {
+    border-color: var(--accent);
+    background: var(--surface2);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+
+  .pc-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+
+  .pc-name {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .status-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .status-dot.online { background: var(--online); box-shadow: 0 0 6px var(--online); animation: pulse-dot 2s ease-in-out infinite; }
+  .status-dot.offline { background: var(--offline); box-shadow: 0 0 4px var(--offline); }
+  .status-dot.idle { background: var(--idle); box-shadow: 0 0 5px var(--idle); animation: pulse-dot 3s ease-in-out infinite; }
+
+  @keyframes pulse-dot {
+    0%,100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.6; }
+  }
+
+  .pc-icon {
+    font-size: 28px;
+    margin-bottom: 8px;
+    display: block;
+    text-align: center;
+  }
+
+  .pc-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .pc-app {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 8px;
+  }
+  .pc-app.deskin { background: rgba(0,212,255,0.1); color: var(--accent); border: 1px solid rgba(0,212,255,0.3); }
+  .pc-app.other { background: rgba(200,216,232,0.08); color: var(--text-dim); border: 1px solid var(--border); }
+
+  .pc-status-text {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 6px;
+  }
+  .pc-status-text.online { color: var(--online); }
+  .pc-status-text.offline { color: var(--offline); }
+  .pc-status-text.idle { color: var(--idle); }
+
+  .pc-uptime {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* LIST VIEW */
+  .list-view { display: none; }
+
+  .list-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .list-table th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    background: var(--surface);
+    position: sticky;
+    top: 56px;
+  }
+
+  .list-table td {
+    padding: 11px 14px;
+    border-bottom: 1px solid rgba(30,45,61,0.5);
+    vertical-align: middle;
+  }
+
+  .list-table tr:hover td { background: var(--surface2); }
+
+  .td-name {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .status-pill.online { background: rgba(0,255,136,0.12); color: var(--online); }
+  .status-pill.offline { background: rgba(255,61,90,0.12); color: var(--offline); }
+  .status-pill.idle { background: rgba(255,184,0,0.12); color: var(--idle); }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(8,12,16,0.85);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 500px;
+    max-width: 94vw;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.7);
+    animation: modal-in 0.2s ease;
+  }
+
+  @keyframes modal-in {
+    from { opacity: 0; transform: scale(0.96) translateY(12px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  .modal-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .modal-title {
+    font-family: var(--font-head);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+
+  .modal-close {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .modal-close:hover { border-color: var(--danger); color: var(--danger); }
+
+  .modal-body { padding: 22px; }
+
+  .form-group {
+    margin-bottom: 16px;
+  }
+  .form-label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .form-input, .form-select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 9px 13px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+    appearance: none;
+  }
+  .form-input:focus, .form-select:focus { border-color: var(--accent); }
+  .form-select option { background: var(--surface2); }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .modal-footer {
+    padding: 16px 22px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .btn-cancel {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 18px;
+    color: var(--text-dim);
+    font-family: var(--font);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-cancel:hover { border-color: var(--text-dim); color: var(--text); }
+
+  .btn-save {
+    background: rgba(0,212,255,0.14);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 8px 22px;
+    color: var(--accent);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-save:hover { background: rgba(0,212,255,0.25); box-shadow: 0 0 14px rgba(0,212,255,0.3); }
+
+  /* ── ALERT TOAST ── */
+  .toast-container {
+    position: fixed;
+    top: 70px;
+    right: 20px;
+    z-index: 900;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .toast {
+    background: var(--surface);
+    border-left: 3px solid var(--danger);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    animation: toast-in 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 260px;
+    max-width: 320px;
+  }
+
+  .toast.warn { border-color: var(--warn); }
+  .toast.ok { border-color: var(--online); }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(30px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  .toast-icon { font-size: 16px; }
+  .toast-msg { flex: 1; line-height: 1.4; }
+  .toast-time { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+
+  /* ── DETAIL MODAL ── */
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .detail-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+
+  .detail-item-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 5px;
+  }
+
+  .detail-item-val {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #fff;
+  }
+
+  .history-bar {
+    display: flex;
+    gap: 3px;
+    margin-top: 6px;
+  }
+
+  .hbar {
+    flex: 1;
+    height: 22px;
+    border-radius: 3px;
+    transition: opacity 0.2s;
+  }
+  .hbar:hover { opacity: 0.7; }
+
+  .alert-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    width: 17px; height: 17px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 8px var(--danger);
+  }
+
+  /* Alert counter in header */
+  .alert-count {
+    background: var(--danger);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-family: var(--font-mono);
+    box-shadow: 0 0 8px rgba(255,61,90,0.5);
+  }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .stats-bar { grid-template-columns: 1fr 1fr; }
+    header { padding: 10px 16px; }
+    .toolbar { padding: 10px 16px; }
+    .main { padding: 16px; }
+    .grid-view { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+  }
+  .empty-state .big-icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state h3 { font-size: 16px; margin-bottom: 6px; }
+  .empty-state p { font-size: 13px; }
+
+  .section-divider {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .offline-section { margin-bottom: 28px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🖥️</div>
+    <div class="logo-text">CONTROL<span>PC</span></div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      TIEMPO REAL
+    </div>
+    <span id="alertCountBadge" class="alert-count" style="display:none">0 alertas</span>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stat-card">
+    <div class="stat-icon total">💻</div>
+    <div class="stat-info">
+      <div class="stat-num c-total" id="statTotal">0</div>
+      <div class="stat-label">Total PCs</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon online">✅</div>
+    <div class="stat-info">
+      <div class="stat-num c-online" id="statOnline">0</div>
+      <div class="stat-label">En línea</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon offline">❌</div>
+    <div class="stat-info">
+      <div class="stat-num c-offline" id="statOffline">0</div>
+      <div class="stat-label">Sin conexión</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon idle">⏸️</div>
+    <div class="stat-info">
+      <div class="stat-num c-idle" id="statIdle">0</div>
+      <div class="stat-label">Inactivas</div>
+    </div>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-box" type="text" id="searchInput" placeholder="Buscar PC, usuario, IP…">
+    </div>
+    <button class="btn-filter active-all" onclick="filterStatus('all', this)">Todas</button>
+    <button class="btn-filter" onclick="filterStatus('online', this)">En línea</button>
+    <button class="btn-filter" onclick="filterStatus('offline', this)">Offline</button>
+    <button class="btn-filter" onclick="filterStatus('idle', this)">Inactivas</button>
+  </div>
+  <div class="toolbar-right">
+    <div class="view-toggle">
+      <button class="view-btn active" id="btnGrid" onclick="setView('grid')" title="Cuadrícula">⊞</button>
+      <button class="view-btn" id="btnList" onclick="setView('list')" title="Lista">☰</button>
+    </div>
+    <button class="btn-export" onclick="exportCSV()">⬇ Exportar</button>
+    <button class="btn-telegram" onclick="openTelegramModal()" id="btnTelegram">✈ Telegram</button>
+    <button class="btn-add" onclick="openAddModal()">+ Agregar PC</button>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main">
+  <!-- OFFLINE ALERTS SECTION -->
+  <div id="offlineSection" class="offline-section" style="display:none">
+    <div class="section-divider" style="color: var(--offline)">⚠ Equipos con problemas</div>
+    <div id="offlineGrid" class="grid-view"></div>
+  </div>
+
+  <!-- ALL PCs -->
+  <div id="mainSection">
+    <div class="section-divider" id="mainLabel">Todos los equipos</div>
+    <div id="gridContainer" class="grid-view"></div>
+    <div id="listContainer" class="list-view">
+      <table class="list-table">
+        <thead>
+          <tr>
+            <th>PC / Nombre</th>
+            <th>Estado</th>
+            <th>Usuario</th>
+            <th>IP</th>
+            <th>Aplicación</th>
+            <th>Horario</th>
+            <th>Última vez activa</th>
+            <th>Uptime</th>
+          </tr>
+        </thead>
+        <tbody id="listBody"></tbody>
+      </table>
+    </div>
+    <div id="emptyState" class="empty-state" style="display:none">
+      <div class="big-icon">🔍</div>
+      <h3>Sin resultados</h3>
+      <p>No hay PCs que coincidan con la búsqueda</p>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ADD MODAL -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">➕ Agregar nueva PC</div>
+      <button class="modal-close" onclick="closeModal('addModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nombre / ID</label>
+          <input class="form-input" id="inp-name" placeholder="PC-01, ESTACION-A...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Usuario</label>
+          <input class="form-input" id="inp-user" placeholder="Nombre del operador">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Dirección IP</label>
+          <input class="form-input" id="inp-ip" placeholder="192.168.1.x">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Aplicación</label>
+          <select class="form-select" id="inp-app">
+            <option value="deskin">deskin</option>
+            <option value="other">Otra</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Horario inicio</label>
+          <input class="form-input" id="inp-start" type="time" value="08:00">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Horario fin</label>
+          <input class="form-input" id="inp-end" type="time" value="17:00">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notas (opcional)</label>
+        <input class="form-input" id="inp-notes" placeholder="Ej: Turno noche, oficina 3...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('addModal')">Cancelar</button>
+      <button class="btn-save" onclick="savePC()">Guardar PC</button>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="detailTitle">PC-01</div>
+      <button class="modal-close" onclick="closeModal('detailModal')">✕</button>
+    </div>
+    <div class="modal-body" id="detailBody"></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="deletePC()" style="border-color:var(--danger);color:var(--danger)">🗑 Eliminar</button>
+      <button class="btn-save" onclick="toggleSimStatus()">⟳ Simular cambio estado</button>
+    </div>
+  </div>
+</div>
+
+<!-- TELEGRAM MODAL -->
+<div class="modal-overlay" id="telegramModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">✈ Configurar alertas Telegram</div>
+      <button class="modal-close" onclick="closeModal('telegramModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="tgStatusBar" class="tg-status inactive">
+        <span>⚪</span> <span id="tgStatusText">Sin configurar — las alertas no se están enviando</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Token del Bot</label>
+        <input class="form-input" id="tg-token" placeholder="1234567890:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Chat ID (tu número de usuario)</label>
+        <input class="form-input" id="tg-chatid" placeholder="123456789">
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:14px;margin-top:-8px">
+        ¿No sabés cómo obtenerlos? <a href="#" onclick="return false" style="color:#29b6f6">Ver instrucciones</a>
+      </div>
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:8px">Qué alertas recibir</div>
+      <div class="tg-options">
+        <label class="tg-option">
+          <input type="checkbox" id="tg-opt-offline" checked>
+          <div class="tg-option-label"><strong>🔴 PC offline</strong>Cuando un equipo se cae</div>
+        </label>
+        <label class="tg-option">
+          <input type="checkbox" id="tg-opt-online" checked>
+          <div class="tg-option-label"><strong>🟢 PC vuelve</strong>Cuando un equipo reconecta</div>
+        </label>
+        <label class="tg-option">
+          <input type="checkbox" id="tg-opt-idle">
+          <div class="tg-option-label"><strong>🟡 PC inactiva</strong>Cuando pasa a modo idle</div>
+        </label>
+        <label class="tg-option">
+          <input type="checkbox" id="tg-opt-resumen">
+          <div class="tg-option-label"><strong>📊 Resumen diario</strong>Estado general cada día</div>
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="testTelegram()" style="border-color:#29b6f6;color:#29b6f6">📨 Enviar prueba</button>
+      <button class="btn-save" onclick="saveTelegramConfig()" style="border-color:#29b6f6;color:#29b6f6;background:rgba(41,182,246,0.12)">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────
+const STORAGE_KEY = 'controlpc_pcs_v2';
+
+const defaultPCs = [
+  { id: 'PC-01', user: 'Carlos M.', ip: '192.168.1.10', app: 'deskin', status: 'online', start: '08:00', end: '17:00', notes: 'Turno mañana', lastSeen: Date.now(), uptime: 14400 },
+  { id: 'PC-02', user: 'Laura G.', ip: '192.168.1.11', app: 'deskin', status: 'online', start: '08:00', end: '17:00', notes: '', lastSeen: Date.now(), uptime: 12800 },
+  { id: 'PC-03', user: 'Diego R.', ip: '192.168.1.12', app: 'deskin', status: 'offline', start: '09:00', end: '18:00', notes: 'Falla detectada', lastSeen: Date.now() - 3600000, uptime: 0 },
+  { id: 'PC-04', user: 'Ana P.', ip: '192.168.1.13', app: 'deskin', status: 'idle', start: '08:00', end: '17:00', notes: '', lastSeen: Date.now() - 900000, uptime: 7200 },
+  { id: 'PC-05', user: 'Martín V.', ip: '192.168.1.14', app: 'deskin', status: 'online', start: '10:00', end: '19:00', notes: 'Turno tarde', lastSeen: Date.now(), uptime: 9000 },
+  { id: 'PC-06', user: 'Sofia L.', ip: '192.168.1.15', app: 'other', status: 'online', start: '07:00', end: '15:00', notes: 'Turno temprano', lastSeen: Date.now(), uptime: 21600 },
+  { id: 'PC-07', user: 'Roberto H.', ip: '192.168.1.16', app: 'deskin', status: 'offline', start: '08:00', end: '17:00', notes: '', lastSeen: Date.now() - 7200000, uptime: 0 },
+  { id: 'PC-08', user: 'Valeria C.', ip: '192.168.1.17', app: 'deskin', status: 'online', start: '08:00', end: '17:00', notes: '', lastSeen: Date.now(), uptime: 18000 },
+  { id: 'PC-09', user: 'Juan F.', ip: '192.168.1.18', app: 'deskin', status: 'idle', start: '12:00', end: '21:00', notes: 'Turno tarde', lastSeen: Date.now() - 600000, uptime: 5400 },
+  { id: 'PC-10', user: 'Camila T.', ip: '192.168.1.19', app: 'deskin', status: 'online', start: '08:00', end: '17:00', notes: '', lastSeen: Date.now(), uptime: 10800 },
+  { id: 'PC-11', user: 'Nicolás B.', ip: '192.168.1.20', app: 'deskin', status: 'online', start: '14:00', end: '22:00', notes: 'Noche', lastSeen: Date.now(), uptime: 7200 },
+  { id: 'PC-12', user: 'Lucia M.', ip: '192.168.1.21', app: 'other', status: 'online', start: '08:00', end: '17:00', notes: '', lastSeen: Date.now(), uptime: 28800 },
+];
+
+function loadPCs() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [...defaultPCs];
+  } catch { return [...defaultPCs]; }
+}
+
+function savePCs() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(pcs)); } catch {}
+}
+
+let pcs = loadPCs();
+let currentFilter = 'all';
+let currentView = 'grid';
+let currentSearch = '';
+let selectedPCId = null;
+
+// ── CLOCK ─────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(now.getMinutes()).padStart(2,'0');
+  const s = String(now.getSeconds()).padStart(2,'0');
+  document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── SIMULATION ────────────────────────────────────────────────────────
+// Randomly toggle a PC's status every ~20s for demo effect
+setInterval(() => {
+  if (pcs.length === 0) return;
+  const idx = Math.floor(Math.random() * pcs.length);
+  const pc = pcs[idx];
+  const old = pc.status;
+  
+  // 10% chance of change
+  if (Math.random() > 0.10) return;
+  
+  const statuses = ['online', 'offline', 'idle'];
+  const next = statuses.filter(s => s !== old)[Math.floor(Math.random() * 2)];
+  pc.status = next;
+  pc.lastSeen = next === 'offline' ? pc.lastSeen : Date.now();
+  if (next !== 'online') pc.uptime = 0;
+  
+  savePCs();
+  renderAll();
+
+  if (next === 'offline') {
+    showToast(`⚠ ${pc.id} se desconectó`, 'danger');
+    if (tgConfig.offline) sendTelegram(`🔴 <b>PC OFFLINE</b>\n\n🖥 Equipo: <b>${pc.id}</b>\n👤 Usuario: ${pc.user}\n🌐 IP: ${pc.ip}\n🕐 ${new Date().toLocaleString('es-AR')}`);
+  } else if (old === 'offline' && next === 'online') {
+    showToast(`✅ ${pc.id} volvió en línea`, 'ok');
+    if (tgConfig.online) sendTelegram(`🟢 <b>PC ONLINE</b>\n\n🖥 Equipo: <b>${pc.id}</b>\n👤 Usuario: ${pc.user}\n🌐 IP: ${pc.ip}\n🕐 ${new Date().toLocaleString('es-AR')}`);
+  } else if (next === 'idle') {
+    if (tgConfig.idle) sendTelegram(`🟡 <b>PC INACTIVA</b>\n\n🖥 Equipo: <b>${pc.id}</b>\n👤 Usuario: ${pc.user}\n🌐 IP: ${pc.ip}\n🕐 ${new Date().toLocaleString('es-AR')}`);
+  }
+}, 8000);
+
+// ── FILTERS & SEARCH ─────────────────────────────────────────────────
+function filterStatus(status, btn) {
+  currentFilter = status;
+  document.querySelectorAll('.btn-filter').forEach(b => {
+    b.className = 'btn-filter';
+  });
+  btn.classList.add('active-' + status);
+  renderAll();
+}
+
+document.getElementById('searchInput').addEventListener('input', e => {
+  currentSearch = e.target.value.toLowerCase().trim();
+  renderAll();
+});
+
+function getFiltered() {
+  return pcs.filter(pc => {
+    const matchStatus = currentFilter === 'all' || pc.status === currentFilter;
+    const matchSearch = !currentSearch ||
+      pc.id.toLowerCase().includes(currentSearch) ||
+      pc.user.toLowerCase().includes(currentSearch) ||
+      pc.ip.includes(currentSearch) ||
+      pc.app.toLowerCase().includes(currentSearch);
+    return matchStatus && matchSearch;
+  });
+}
+
+// ── VIEWS ─────────────────────────────────────────────────────────────
+function setView(v) {
+  currentView = v;
+  document.getElementById('gridContainer').style.display = v === 'grid' ? 'grid' : 'none';
+  document.getElementById('listContainer').style.display = v === 'list' ? 'block' : 'none';
+  document.getElementById('btnGrid').classList.toggle('active', v === 'grid');
+  document.getElementById('btnList').classList.toggle('active', v === 'list');
+  renderAll();
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────
+function renderAll() {
+  updateStats();
+  const filtered = getFiltered();
+  
+  if (currentFilter === 'all' && !currentSearch) {
+    const offlines = pcs.filter(p => p.status === 'offline');
+    const offSection = document.getElementById('offlineSection');
+    if (offlines.length > 0) {
+      offSection.style.display = '';
+      renderCards(offlines, 'offlineGrid');
+    } else {
+      offSection.style.display = 'none';
+    }
+  } else {
+    document.getElementById('offlineSection').style.display = 'none';
+  }
+
+  document.getElementById('emptyState').style.display = filtered.length === 0 ? 'flex' : 'none';
+
+  if (currentView === 'grid') renderCards(filtered, 'gridContainer');
+  else renderList(filtered);
+}
+
+function formatUptime(seconds) {
+  if (!seconds) return '—';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'hace un momento';
+  if (m < 60) return `hace ${m}m`;
+  return `hace ${Math.floor(m/60)}h ${m%60}m`;
+}
+
+function statusLabel(s) {
+  if (s === 'online') return 'En línea';
+  if (s === 'offline') return 'Sin conexión';
+  return 'Inactiva';
+}
+
+function renderCards(list, containerId) {
+  const c = document.getElementById(containerId);
+  if (!c) return;
+  if (list.length === 0) { c.innerHTML = ''; return; }
+
+  c.innerHTML = list.map(pc => `
+    <div class="pc-card status-${pc.status}" onclick="openDetail('${pc.id}')">
+      ${pc.status === 'offline' ? '<div class="alert-badge">!</div>' : ''}
+      <div class="pc-card-head">
+        <div class="pc-name">${pc.id}</div>
+        <div class="status-dot ${pc.status}"></div>
+      </div>
+      <span class="pc-icon">💻</span>
+      <div class="pc-meta"><span>${pc.user}</span><span>${pc.ip}</span></div>
+      <div class="pc-meta"><span>${pc.start}–${pc.end}</span><span>${pc.notes ? pc.notes.substring(0,12)+'…' : ''}</span></div>
+      <span class="pc-app ${pc.app}">${pc.app}</span>
+      <div class="pc-status-text ${pc.status}">${statusLabel(pc.status)}</div>
+      <div class="pc-uptime">${pc.status !== 'offline' ? 'Uptime: ' + formatUptime(pc.uptime) : 'Última: ' + timeAgo(pc.lastSeen)}</div>
+    </div>
+  `).join('');
+}
+
+function renderList(list) {
+  const tbody = document.getElementById('listBody');
+  if (list.length === 0) { tbody.innerHTML = ''; return; }
+
+  tbody.innerHTML = list.map(pc => `
+    <tr onclick="openDetail('${pc.id}')" style="cursor:pointer">
+      <td class="td-name">${pc.id}</td>
+      <td><span class="status-pill ${pc.status}">
+        <span class="status-dot ${pc.status}" style="width:7px;height:7px;flex-shrink:0"></span>
+        ${statusLabel(pc.status)}
+      </span></td>
+      <td>${pc.user}</td>
+      <td><span style="font-family:var(--font-mono);font-size:12px">${pc.ip}</span></td>
+      <td><span class="pc-app ${pc.app}" style="margin:0">${pc.app}</span></td>
+      <td style="font-family:var(--font-mono);font-size:12px">${pc.start}–${pc.end}</td>
+      <td style="color:var(--text-dim);font-size:12px">${timeAgo(pc.lastSeen)}</td>
+      <td style="font-family:var(--font-mono);font-size:12px">${formatUptime(pc.uptime)}</td>
+    </tr>
+  `).join('');
+}
+
+function updateStats() {
+  const total = pcs.length;
+  const online = pcs.filter(p => p.status === 'online').length;
+  const offline = pcs.filter(p => p.status === 'offline').length;
+  const idle = pcs.filter(p => p.status === 'idle').length;
+
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statOnline').textContent = online;
+  document.getElementById('statOffline').textContent = offline;
+  document.getElementById('statIdle').textContent = idle;
+
+  const badge = document.getElementById('alertCountBadge');
+  if (offline > 0) {
+    badge.style.display = '';
+    badge.textContent = offline + (offline === 1 ? ' alerta' : ' alertas');
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// ── DETAIL ────────────────────────────────────────────────────────────
+function openDetail(id) {
+  selectedPCId = id;
+  const pc = pcs.find(p => p.id === id);
+  if (!pc) return;
+
+  document.getElementById('detailTitle').innerHTML = `
+    <span class="status-dot ${pc.status}" style="display:inline-block;margin-right:8px"></span>
+    ${pc.id} — ${pc.user}
+  `;
+
+  // Random history bars for visual
+  const bars = Array.from({length: 24}, () => {
+    const r = Math.random();
+    if (r > 0.85) return `<div class="hbar" style="background:var(--offline)" title="Offline"></div>`;
+    if (r > 0.65) return `<div class="hbar" style="background:var(--idle)" title="Idle"></div>`;
+    return `<div class="hbar" style="background:var(--online)" title="Online"></div>`;
+  }).join('');
+
+  document.getElementById('detailBody').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-item">
+        <div class="detail-item-label">Estado actual</div>
+        <div class="detail-item-val" style="color:var(--${pc.status === 'online' ? 'online' : pc.status === 'offline' ? 'offline' : 'idle'})">${statusLabel(pc.status)}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Dirección IP</div>
+        <div class="detail-item-val">${pc.ip}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Aplicación</div>
+        <div class="detail-item-val">${pc.app}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Uptime</div>
+        <div class="detail-item-val">${formatUptime(pc.uptime)}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Horario</div>
+        <div class="detail-item-val">${pc.start} – ${pc.end}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-item-label">Última actividad</div>
+        <div class="detail-item-val">${timeAgo(pc.lastSeen)}</div>
+      </div>
+    </div>
+    ${pc.notes ? `<div style="margin-bottom:16px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text-dim)">📝 ${pc.notes}</div>` : ''}
+    <div style="margin-bottom:6px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim)">Historial últimas 24h</div>
+    <div class="history-bar">${bars}</div>
+    <div style="margin-top:6px;font-size:10px;color:var(--text-dim);display:flex;justify-content:space-between">
+      <span>24h atrás</span><span>ahora</span>
+    </div>
+  `;
+
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function toggleSimStatus() {
+  const pc = pcs.find(p => p.id === selectedPCId);
+  if (!pc) return;
+  const statuses = ['online', 'offline', 'idle'];
+  const idx = (statuses.indexOf(pc.status) + 1) % 3;
+  pc.status = statuses[idx];
+  pc.lastSeen = pc.status !== 'offline' ? Date.now() : pc.lastSeen;
+  savePCs();
+  renderAll();
+  openDetail(selectedPCId);
+  showToast(`${pc.id}: estado → ${statusLabel(pc.status)}`, pc.status === 'offline' ? 'danger' : 'ok');
+}
+
+function deletePC() {
+  if (!selectedPCId) return;
+  if (!confirm('¿Eliminar ' + selectedPCId + '?')) return;
+  pcs = pcs.filter(p => p.id !== selectedPCId);
+  savePCs();
+  renderAll();
+  closeModal('detailModal');
+  showToast(`🗑 ${selectedPCId} eliminada`, 'warn');
+}
+
+// ── ADD PC ────────────────────────────────────────────────────────────
+function openAddModal() {
+  document.getElementById('addModal').classList.add('open');
+}
+
+function savePC() {
+  const name = document.getElementById('inp-name').value.trim();
+  const user = document.getElementById('inp-user').value.trim();
+  const ip = document.getElementById('inp-ip').value.trim();
+  const app = document.getElementById('inp-app').value;
+  const start = document.getElementById('inp-start').value;
+  const end = document.getElementById('inp-end').value;
+  const notes = document.getElementById('inp-notes').value.trim();
+
+  if (!name || !ip) { alert('Nombre e IP son requeridos'); return; }
+  if (pcs.find(p => p.id === name)) { alert('Ya existe una PC con ese nombre'); return; }
+
+  pcs.push({ id: name, user: user || 'Sin asignar', ip, app, status: 'offline', start, end, notes, lastSeen: Date.now(), uptime: 0 });
+  savePCs();
+  renderAll();
+  closeModal('addModal');
+  showToast(`✅ ${name} agregada correctamente`, 'ok');
+
+  // Clear form
+  ['inp-name','inp-user','inp-ip','inp-notes'].forEach(id => document.getElementById(id).value = '');
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+
+// ── TOAST ─────────────────────────────────────────────────────────────
+function showToast(msg, type = 'danger') {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  const now = new Date();
+  const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  t.innerHTML = `
+    <span class="toast-icon">${type === 'danger' ? '🔴' : type === 'ok' ? '🟢' : '🟡'}</span>
+    <span class="toast-msg">${msg}</span>
+    <span class="toast-time">${ts}</span>
+  `;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 5000);
+}
+
+// ── EXPORT CSV ────────────────────────────────────────────────────────
+function exportCSV() {
+  const headers = ['ID', 'Usuario', 'IP', 'App', 'Estado', 'Horario', 'Ultima actividad', 'Uptime (seg)', 'Notas'];
+  const rows = pcs.map(pc => [
+    pc.id, pc.user, pc.ip, pc.app, pc.status,
+    `${pc.start}-${pc.end}`,
+    new Date(pc.lastSeen).toLocaleString('es-AR'),
+    pc.uptime, pc.notes
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `controlpc_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  showToast('📄 CSV exportado correctamente', 'ok');
+}
+
+// ── UPTIME TICKER ─────────────────────────────────────────────────────
+setInterval(() => {
+  pcs.forEach(pc => { if (pc.status === 'online') pc.uptime += 30; });
+  savePCs();
+  renderAll();
+}, 30000);
+
+// ── TELEGRAM ──────────────────────────────────────────────────────────
+const TG_KEY = 'controlpc_telegram';
+
+function loadTGConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TG_KEY));
+    if (saved && saved.token) return saved;
+  } catch {}
+  // Pre-cargado con tus datos
+  return {
+    token: '8928338451:AAGGC9HipmHnIhkgbZUfjAKO_stOFqI1UGU',
+    chatId: '8727165137',
+    offline: true,
+    online: true,
+    idle: false,
+    resumen: false
+  };
+}
+
+let tgConfig = loadTGConfig();
+
+function openTelegramModal() {
+  const cfg = tgConfig;
+  document.getElementById('tg-token').value = cfg.token || '';
+  document.getElementById('tg-chatid').value = cfg.chatId || '';
+  document.getElementById('tg-opt-offline').checked = cfg.offline !== false;
+  document.getElementById('tg-opt-online').checked = cfg.online !== false;
+  document.getElementById('tg-opt-idle').checked = cfg.idle === true;
+  document.getElementById('tg-opt-resumen').checked = cfg.resumen === true;
+  updateTGStatus();
+  document.getElementById('telegramModal').classList.add('open');
+}
+
+function updateTGStatus() {
+  const bar = document.getElementById('tgStatusBar');
+  const txt = document.getElementById('tgStatusText');
+  const btn = document.getElementById('btnTelegram');
+  if (tgConfig.token && tgConfig.chatId) {
+    bar.className = 'tg-status active';
+    bar.querySelector('span').textContent = '🟢';
+    txt.textContent = 'Activo — alertas configuradas y funcionando';
+    btn.classList.add('configured');
+  } else {
+    bar.className = 'tg-status inactive';
+    bar.querySelector('span').textContent = '⚪';
+    txt.textContent = 'Sin configurar — las alertas no se están enviando';
+    btn.classList.remove('configured');
+  }
+}
+
+function saveTelegramConfig() {
+  const token = document.getElementById('tg-token').value.trim();
+  const chatId = document.getElementById('tg-chatid').value.trim();
+  if (!token || !chatId) { showToast('⚠ Token y Chat ID son requeridos', 'warn'); return; }
+
+  tgConfig = {
+    token, chatId,
+    offline: document.getElementById('tg-opt-offline').checked,
+    online: document.getElementById('tg-opt-online').checked,
+    idle: document.getElementById('tg-opt-idle').checked,
+    resumen: document.getElementById('tg-opt-resumen').checked,
+  };
+  localStorage.setItem(TG_KEY, JSON.stringify(tgConfig));
+  updateTGStatus();
+  closeModal('telegramModal');
+  showToast('✅ Telegram configurado correctamente', 'ok');
+}
+
+async function sendTelegram(msg) {
+  if (!tgConfig.token || !tgConfig.chatId) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${tgConfig.token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: tgConfig.chatId,
+        text: msg,
+        parse_mode: 'HTML'
+      })
+    });
+  } catch(e) { console.warn('Telegram error:', e); }
+}
+
+async function testTelegram() {
+  const token = document.getElementById('tg-token').value.trim();
+  const chatId = document.getElementById('tg-chatid').value.trim();
+  if (!token || !chatId) { showToast('⚠ Completá el token y chat ID primero', 'warn'); return; }
+  showToast('📨 Enviando mensaje de prueba…', 'warn');
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `🖥 <b>ControlPC — Prueba de conexión</b>\n\n✅ Tu bot está correctamente configurado.\n\nVas a recibir alertas en tiempo real cuando alguna PC cambie de estado.\n\n🕐 ${new Date().toLocaleString('es-AR')}`,
+        parse_mode: 'HTML'
+      })
+    });
+    const data = await res.json();
+    if (data.ok) showToast('✅ Mensaje enviado a Telegram. ¡Revisá tu celu!', 'ok');
+    else showToast('❌ Error: ' + (data.description || 'token o chat ID incorrecto'), 'danger');
+  } catch(e) {
+    showToast('❌ No se pudo conectar con Telegram', 'danger');
+  }
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────
+renderAll();
+updateTGStatus();
+showToast('🖥 Monitor iniciado — 12 equipos cargados', 'ok');
+</script>
+</body>
+</html>
